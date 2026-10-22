@@ -1,0 +1,22 @@
+# Your game files (tools/fetch-ror2.sh) -- never commit these
+/game
+*.exe
+*.dll
+
+# Build output (contains game files)
+build/
+
+# Downloaded third-party tools and SDKs (Unity player, Wwise, Steamworks, Mono.Cecil, ...)
+lib/
+.work/
+.venv/
+
+# Generated
+tools/shaderconv/.hlslcc/
+tools/shaderconv/.work/
+tools/shaderconv/dxbc2msl
+tools/shaderconv/mslcheck
+__pycache__/
+*.dSYM/
+.DS_Store
+.vscode/

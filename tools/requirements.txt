@@ -1,0 +1,4 @@
+UnityPy==1.25.4
+lz4
+dnfile
+pefile

@@ -1,0 +1,177 @@
+diff --git a/src/decode.cpp b/src/decode.cpp
+index b0622b3..681aadb 100644
+--- a/src/decode.cpp
++++ b/src/decode.cpp
+@@ -748,10 +748,10 @@ const uint32_t* DecodeDeclaration(Shader* psShader, const uint32_t* pui32Token,
+             DecodeOperand(pui32Token + ui32OperandOffset, &psDecl->asOperands[0]);
+ 
+             psShader->sInfo.GetResourceFromBindingPoint(RGROUP_UAV, psDecl->asOperands[0].ui32RegisterNumber, &psBinding);
+-            psShader->sInfo.GetConstantBufferFromBindingPoint(RGROUP_UAV, psBinding->ui32BindPoint, &psBuffer);
+-            psDecl->ui32BufferStride = psBuffer->ui32TotalSizeInBytes;
++            // The structure stride is the instruction's last token; RDEF can be stripped (Unity player builds).
++            psDecl->ui32BufferStride = pui32Token[ui32TokenLength - 1];
+ 
+-            switch (psBinding->eType)
++            switch (psBinding ? psBinding->eType : RTYPE_UAV_RWSTRUCTURED)
+             {
+                 case RTYPE_UAV_RWSTRUCTURED_WITH_COUNTER:
+                 case RTYPE_UAV_APPEND_STRUCTURED:
+@@ -770,9 +770,8 @@ const uint32_t* DecodeDeclaration(Shader* psShader, const uint32_t* pui32Token,
+             psDecl->ui32NumOperands = 1;
+             DecodeOperand(pui32Token + ui32OperandOffset, &psDecl->asOperands[0]);
+ 
+-            psShader->sInfo.GetResourceFromBindingPoint(RGROUP_TEXTURE, psDecl->asOperands[0].ui32RegisterNumber, &psBinding);
+-            psShader->sInfo.GetConstantBufferFromBindingPoint(RGROUP_TEXTURE, psBinding->ui32BindPoint, &psBuffer);
+-            psDecl->ui32BufferStride = psBuffer->ui32TotalSizeInBytes;
++            // The structure stride is the instruction's last token; RDEF can be stripped (Unity player builds).
++            psDecl->ui32BufferStride = pui32Token[ui32TokenLength - 1];
+             break;
+         }
+         case OPCODE_DCL_RESOURCE_RAW:
+diff --git a/src/internal_includes/toMetal.h b/src/internal_includes/toMetal.h
+index 08d8eb1..3d38413 100644
+--- a/src/internal_includes/toMetal.h
++++ b/src/internal_includes/toMetal.h
+@@ -54,6 +54,10 @@ private:
+ 
+     void DeclareConstantBuffer(const ConstantBuffer *psCBuf, uint32_t ui32BindingPoint);
+     void DeclareStructType(const std::string &name, const std::vector<ShaderVar> &contents, bool withinCB = false, uint32_t cumulativeOffset = 0, bool stripUnused = false);
++    void EmitCBPadding(const std::string &name, uint32_t &cursor, uint32_t target);
++    uint32_t m_PadCounter = 0;
++    uint32_t m_PackedOffset = 0;
++    uint32_t m_CBTotalSize = 0;
+     void DeclareStructType(const std::string &name, const std::vector<ShaderVarType> &contents, bool withinCB = false, uint32_t cumulativeOffset = 0);
+     void DeclareStructVariable(const std::string &parentName, const ShaderVar &var, bool withinCB = false, uint32_t cumulativeOffset = 0, bool isUsed = true);
+     void DeclareStructVariable(const std::string &parentName, const ShaderVarType &var, bool withinCB = false, uint32_t cumulativeOffset = 0, bool isUsed = true);
+diff --git a/src/toMetalDeclaration.cpp b/src/toMetalDeclaration.cpp
+index 73a0cd0..88d21d5 100644
+--- a/src/toMetalDeclaration.cpp
++++ b/src/toMetalDeclaration.cpp
+@@ -348,7 +348,7 @@ void ToMetal::DeclareBuiltinOutput(const Declaration *psDecl)
+     switch (psDecl->asOperands[0].eSpecialName)
+     {
+         case NAME_POSITION:
+-            m_StructDefinitions[out].m_Members.push_back(std::make_pair("mtl_Position", "float4 mtl_Position [[ position ]]"));
++            m_StructDefinitions[out].m_Members.push_back(std::make_pair("mtl_Position", "float4 mtl_Position [[ position, invariant ]]"));
+             break;
+         case NAME_RENDER_TARGET_ARRAY_INDEX:
+             m_StructDefinitions[out].m_Members.push_back(std::make_pair("mtl_Layer", "uint mtl_Layer [[ render_target_array_index ]]"));
+@@ -402,7 +402,7 @@ void ToMetal::DeclareBuiltinOutput(const Declaration *psDecl)
+             ASSERT(sig != NULL);
+             if (sig->eSystemValueType == NAME_POSITION && sig->ui32SemanticIndex == 0)
+             {
+-                m_StructDefinitions[out].m_Members.push_back(std::make_pair("mtl_Position", "float4 mtl_Position [[ position ]]"));
++                m_StructDefinitions[out].m_Members.push_back(std::make_pair("mtl_Position", "float4 mtl_Position [[ position, invariant ]]"));
+                 break;
+             }
+ 
+@@ -984,6 +984,10 @@ void ToMetal::DeclareStructVariable(const std::string &parentName, const ShaderV
+     else if (var.Class == SVC_VECTOR && var.Columns > 1)
+     {
+         std::ostringstream oss;
++        bool packed = withinCB && !arrayWithinCB && var.Elements <= 1 &&
++            (var.Columns == 3 || (var.Columns == 2 && (m_PackedOffset % 8) != 0));
++        if (packed)
++            oss << "packed_";
+         oss << HLSLcc::GetConstructorForTypeMetal(var.Type, arrayWithinCB ? 4 : var.Columns);
+         oss << " " << var.name;
+         if (var.Elements > 1)
+@@ -1028,23 +1032,87 @@ void ToMetal::DeclareStructVariable(const std::string &parentName, const ShaderV
+     }
+ }
+ 
++// Unity-player patch: keep constant buffer structs at their D3D11 (HLSL) byte offsets.
++// Padding fills gaps left by stripped/unused members, and packed vectors reproduce HLSL's
++// 4-byte packing, so the Metal layout matches the engine's D3D-style constant buffer data.
++static uint32_t HLSLVarSize(const ShaderVarType &v)
++{
++    uint32_t n = v.Elements > 1 ? v.Elements : 1;
++    if (v.Class == SVC_STRUCT)
++    {
++        uint32_t end = 0;
++        for (size_t i = 0; i < v.Members.size(); i++)
++            end = std::max(end, v.Members[i].Offset + HLSLVarSize(v.Members[i]));
++        uint32_t stride = (end + 15) & ~15u;
++        return stride * n;
++    }
++    uint32_t regs = 1, last;
++    if (v.Class == SVC_MATRIX_COLUMNS) { regs = v.Columns; last = (v.Columns - 1) * 16 + v.Rows * 4; }
++    else if (v.Class == SVC_MATRIX_ROWS) { regs = v.Rows; last = (v.Rows - 1) * 16 + v.Columns * 4; }
++    else last = v.Columns * 4;
++    return (n - 1) * regs * 16 + last;
++}
++
++void ToMetal::EmitCBPadding(const std::string &name, uint32_t &cursor, uint32_t target)
++{
++    while (cursor < target)
++    {
++        std::ostringstream oss;
++        std::string padName = "hlslcc_pad" + std::to_string(m_PadCounter++);
++        if ((cursor % 16) == 0 && target - cursor >= 16)
++        {
++            uint32_t count = (target - cursor) / 16;
++            oss << "float4 " << padName << "[" << count << "]";
++            cursor += count * 16;
++        }
++        else
++        {
++            oss << "float " << padName;
++            cursor += 4;
++        }
++        m_StructDefinitions[name].m_Members.push_back(std::make_pair(padName, oss.str()));
++    }
++}
++
+ void ToMetal::DeclareStructType(const std::string &name, const std::vector<ShaderVar> &contents, bool withinCB, uint32_t cumulativeOffset, bool stripUnused /* = false */)
+ {
++    uint32_t cursor = 0;
+     for (std::vector<ShaderVar>::const_iterator itr = contents.begin(); itr != contents.end(); itr++)
+     {
+         if (stripUnused && !itr->sType.m_IsUsed)
+             continue;
+-
++        if (withinCB)
++        {
++            EmitCBPadding(name, cursor, itr->ui32StartOffset);
++            m_PackedOffset = cursor;
++        }
+         DeclareStructVariable(name, *itr, withinCB, cumulativeOffset, itr->sType.m_IsUsed);
++        if (withinCB)
++            cursor = itr->ui32StartOffset + HLSLVarSize(itr->sType);
+     }
++    if (withinCB && m_CBTotalSize > cursor)
++        EmitCBPadding(name, cursor, m_CBTotalSize);
+ }
+ 
+ void ToMetal::DeclareStructType(const std::string &name, const std::vector<ShaderVarType> &contents, bool withinCB, uint32_t cumulativeOffset)
+ {
++    uint32_t cursor = 0;
++    uint32_t savedTotal = m_CBTotalSize;
++    m_CBTotalSize = 0;
+     for (std::vector<ShaderVarType>::const_iterator itr = contents.begin(); itr != contents.end(); itr++)
+     {
++        if (withinCB)
++        {
++            EmitCBPadding(name, cursor, itr->Offset);
++            m_PackedOffset = cursor;
++        }
+         DeclareStructVariable(name, *itr, withinCB, cumulativeOffset);
++        if (withinCB)
++            cursor = itr->Offset + HLSLVarSize(*itr);
+     }
++    if (withinCB)
++        EmitCBPadding(name, cursor, (cursor + 15) & ~15u);
++    m_CBTotalSize = savedTotal;
+ }
+ 
+ void ToMetal::DeclareConstantBuffer(const ConstantBuffer *psCBuf, uint32_t ui32BindingPoint)
+@@ -1061,7 +1129,9 @@ void ToMetal::DeclareConstantBuffer(const ConstantBuffer *psCBuf, uint32_t ui32B
+     if (psContext->psDependencies->IsMemberDeclared(cbname))
+         return;
+ 
++    m_CBTotalSize = (psCBuf->ui32TotalSizeInBytes + 15) & ~15u;
+     DeclareStructType(cbname + "_Type", psCBuf->asVars, true, 0, stripUnused);
++    m_CBTotalSize = 0;
+ 
+     std::ostringstream oss;
+     uint32_t slot = m_BufferSlots.GetBindingSlot(ui32BindingPoint, BindingSlotAllocator::ConstantBuffer);
