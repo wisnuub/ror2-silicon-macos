@@ -1,6 +1,14 @@
-# Risk of Rain 2 Native macOS Build for Apple Silicon
+<p align="center">
+  <a href="https://store.steampowered.com/app/632360/Risk_of_Rain_2/">
+    <img src="https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/632360/3f53e1f00e3021cec85a45663c597128890e74b5.ico" width="128" height="128" alt="Risk of Rain 2">
+  </a>
+</p>
 
-**ror2-silicon-macos**: play Risk of Rain 2 natively on Apple Silicon Macs (M1, M2, M3, M4).
+<h1 align="center">Risk of Rain 2</h1>
+
+<p align="center"><b>Native macOS Build for Apple Silicon (M1, M2, M3, M4)</b></p>
+
+**ror2-silicon-macos**: play Risk of Rain 2 natively on Apple Silicon Macs.
 
 **Tested on a Mac with an M1 chip and 8 GB of memory (macOS 26).**
 
@@ -12,7 +20,8 @@ This repository has **no game files**. The scripts download the game with your S
 and your account must own the game.
 
 > This project is not made by, or connected to, Hopoo Games, Gearbox, Unity, Audiokinetic or
-> Valve. Risk of Rain 2 is a trademark of its owners.
+> Valve. Risk of Rain 2 and its icon belong to their owners. The icon above is loaded from Steam
+> and links to the game's Steam page.
 
 ## What works
 
