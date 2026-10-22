@@ -23,5 +23,11 @@ if [ -e "$DEST" ]; then
     rm -rf "$DEST"
 fi
 mv "$SRC" "$DEST"
+# A moved app isn't always noticed by macOS: register it so it shows up in Launchpad and Spotlight
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+"$LSREGISTER" -u "$SRC" 2>/dev/null || true
+touch "$DEST"
+"$LSREGISTER" -f -R "$DEST" 2>/dev/null || true
+mdimport "$DEST" 2>/dev/null || true
 echo "Installed: $DEST"
 echo "Open Risk of Rain 2 from Launchpad or the Applications folder. Steam must be running."
