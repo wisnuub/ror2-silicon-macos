@@ -130,6 +130,16 @@ uses half-size textures. This uses about half the graphics memory and keeps the 
 slowing down. You can change all of this in the game's settings. Delete the file to go back to
 the defaults.
 
+## Show the FPS
+
+The game has no FPS counter of its own. macOS has one built in: Apple's Metal Performance HUD.
+It shows FPS, frame time and memory in the corner of the screen. Start the game from Terminal
+with:
+
+```bash
+open --env MTL_HUD_ENABLED=1 "/Applications/Risk of Rain 2.app"
+```
+
 ## Problems
 
 - **macOS says the app is damaged or won't open it:** run
