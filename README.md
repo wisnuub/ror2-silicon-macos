@@ -161,6 +161,17 @@ full textures):
 Measured with the game's own frame timer over 5-second windows. The numbers are the frames the
 game renders. A 60 Hz MacBook screen shows up to 60 of them.
 
+**With shadows on** (soft shadows, 2 cascades, medium resolution, distance 200) at 1280x800, the
+game averaged **about 100 fps** across 5 stages and 25 different spots (92 to 108 fps per stage),
+with typical slowest frames around 17 ms. So shadows are affordable even on a base M1.
+
+**Why one CPU core sets the limit:** like every Unity game of its age, Risk of Rain 2 runs its game
+logic (enemies, items, projectiles) one step at a time on a single main thread. This is the same on
+Windows. The M1 has 8 cores, but in our measurements the main thread was about 92% busy while the
+other cores were mostly idle. That is why fps drops when lots of enemies are on screen, and why fast
+single-core speed matters more than core count. The graphics card is not the limit on an M1 at
+these resolutions. macOS Game Mode keeps the main thread on a fast performance core.
+
 **What costs the most** (measured at 1440x900):
 
 - **Shadows** are the biggest cost. Turning them off took a scene from about 30 fps to 50+ fps.
