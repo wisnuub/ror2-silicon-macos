@@ -88,7 +88,58 @@ public class MacDiag : MonoBehaviour
         if (now >= statsNext) { statsNext = now + 5; LogStats(); }
         if (now >= stateNext) { stateNext = now + 30; LogState(); }
         if (autopilot) Autopilot(now);
+        // Autopilot runs are unattended: make the test character invulnerable once it has spawned
+        if (godPending && LocalBody() != null) { godPending = false; ToggleGod(); }
         if (now >= cmdNext) { cmdNext = now + 1; RunCommandFile(); }
+        // Test keys (diagnostic builds only): F7 place a Warbanner, F8 god mode, F9 capture the frame
+        try
+        {
+            if (Input.GetKeyDown(KeyCode.F8)) ToggleGod();
+            if (Input.GetKeyDown(KeyCode.F9)) CaptureBug();
+            if (Input.GetKeyDown(KeyCode.F7)) { Helper(new[] { "ward" }); Chat("<color=#ffd060>[Mac test] Warbanner placed (F7)</color>"); }
+        }
+        catch (Exception e) { Log("test key: " + e); }
+    }
+
+    int bugCaptures;
+    bool godPending;
+
+    static void Chat(string msg)
+    {
+        try { Asm("RoR2").GetType("RoR2.Chat").GetMethod("AddMessage", new[] { typeof(string) }).Invoke(null, new object[] { msg }); }
+        catch (Exception) { }
+    }
+
+    static Component LocalBody()
+    {
+        foreach (var u in (IEnumerable)StaticGet(Asm("RoR2").GetType("RoR2.LocalUserManager"), "readOnlyLocalUsersList"))
+            return InstGet(u, "cachedBody") as Component;
+        return null;
+    }
+
+    void ToggleGod()
+    {
+        var body = LocalBody();
+        var hc = body ? body.GetComponent(Asm("RoR2").GetType("RoR2.HealthComponent")) : null;
+        if (hc == null) { Chat("<color=#ff8080>[Mac test] No character yet</color>"); return; }
+        var prop = hc.GetType().GetProperty("godMode");
+        bool on = !(bool)prop.GetValue(hc, null);
+        prop.SetValue(hc, on, null);
+        Log("god mode " + (on ? "on" : "off"));
+        Chat(on ? "<color=#80ff80>[Mac test] God mode ON (F8 to turn off)</color>" : "<color=#ffff80>[Mac test] God mode OFF</color>");
+    }
+
+    void CaptureBug()
+    {
+        int n = ++bugCaptures;
+        var cam = Camera.main;
+        Log(string.Format("BUG CAPTURE {0}: scene={1} camPos={2} camRot={3} screen={4}x{5} mode={6}", n, SceneManager.GetActiveScene().name,
+            cam ? cam.transform.position.ToString() : "-", cam ? cam.transform.eulerAngles.ToString() : "-", Screen.width, Screen.height, Screen.fullScreenMode));
+        ScreenCapture.CaptureScreenshot("/tmp/ror2-bug-" + n + ".png");
+        Helper(new[] { "cam" });
+        Helper(new[] { "cmdbufs" });
+        StartCoroutine(DumpDepth("/tmp/ror2-bug-" + n + "-depth.png"));
+        Chat("<color=#80c0ff>[Mac test] Captured #" + n + ". Hold still a moment.</color>");
     }
 
     float cmdNext;
@@ -97,6 +148,7 @@ public class MacDiag : MonoBehaviour
     // and the file removed. Lines starting with '!' are diagnostic helpers (see Helper).
     void RunCommandFile()
     {
+        instance = this;   // the live component (RoR2 may create and destroy a duplicate app object)
         var path = cmdPath;
         try
         {
@@ -105,7 +157,7 @@ public class MacDiag : MonoBehaviour
             System.IO.File.Delete(path);
             foreach (var line in lines)
                 if (line.Trim().Length > 0)
-                    try { if (line.Trim().StartsWith("!")) Helper(line.Trim().Substring(1).Split(' ')); else Submit(line.Trim()); } catch (Exception e) { Log(line + " failed: " + (e.InnerException ?? e).Message); }
+                    try { if (line.Trim().StartsWith("!")) Helper(line.Trim().Substring(1).Split(' ')); else Submit(line.Trim()); } catch (Exception e) { Log(line + " failed: " + (e.InnerException ?? e)); }
         }
         catch (Exception e) { Log("command file: " + e.Message); }
     }
@@ -212,8 +264,148 @@ public class MacDiag : MonoBehaviour
                 Log(a[0] + " -> " + r);
                 break;
             }
+            case "ward":
+            {
+                // Place a Warbanner zone at the local player (repro for transparent effects vs depth)
+                var lra = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetTypes().FirstOrDefault(t => t.Name == "LegacyResourcesAPI"))
+                    .First(t => t != null);
+                var load = lra.GetMethods().First(m => m.Name == "Load" && m.IsGenericMethod).MakeGenericMethod(typeof(GameObject));
+                float dy = a.Length > 1 ? float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture) : 0f;
+                var prefab = (GameObject)load.Invoke(null, new object[] { a.Length > 2 ? a[2] : "Prefabs/NetworkedObjects/WarbannerWard" });
+                var users = StaticGet(ror2.GetType("RoR2.LocalUserManager"), "readOnlyLocalUsersList") as IEnumerable;
+                Vector3 pos = Vector3.zero;
+                foreach (var u in users) { var body = InstGet(u, "cachedBody") as Component; if (body) pos = body.transform.position; break; }
+                pos.y += dy;
+                var go = Instantiate(prefab, pos, Quaternion.identity);
+                var spawn = Asm("com.unity.multiplayer-hlapi.Runtime").GetType("UnityEngine.Networking.NetworkServer").GetMethods()
+                    .First(m => m.Name == "Spawn" && m.GetParameters().Length == 1);
+                spawn.Invoke(null, new object[] { go });
+                Log("ward: spawned " + prefab.name + " at " + pos);
+                break;
+            }
+            case "tp":
+            {
+                // Move the player next to the teleporter and activate it (repro for the holdout zone)
+                var tp = StaticGet(ror2.GetType("RoR2.TeleporterInteraction"), "instance") as Component;
+                if (tp == null) { Log("tp: no teleporter"); break; }
+                Component body = null;
+                foreach (var u in (IEnumerable)StaticGet(ror2.GetType("RoR2.LocalUserManager"), "readOnlyLocalUsersList")) { body = InstGet(u, "cachedBody") as Component; break; }
+                var target = tp.transform.position + tp.transform.forward * 6f + Vector3.up * 1f;
+                ror2.GetType("RoR2.TeleportHelper").GetMethod("TeleportBody", new[] { ror2.GetType("RoR2.CharacterBody"), typeof(Vector3), typeof(bool) })
+                    .Invoke(null, new object[] { body, target, true });
+                var interactor = body.GetComponent(ror2.GetType("RoR2.Interactor"));
+                tp.GetType().GetMethod("OnInteractionBegin").Invoke(tp, new object[] { interactor });
+                Log("tp: activated teleporter at " + tp.transform.position);
+                break;
+            }
+            case "scene":
+            {
+                // Switch the running game to another stage (host only), e.g. !scene golemplains2
+                var nms = StaticGet(ror2.GetType("RoR2.Networking.NetworkManagerSystem"), "singleton");
+                nms.GetType().GetMethod("ServerChangeScene", new[] { typeof(string) }).Invoke(nms, new object[] { a[1] });
+                Log("scene: changing to " + a[1]);
+                break;
+            }
+            case "goto":
+            {
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var target = new Vector3(float.Parse(a[1], inv), float.Parse(a[2], inv), float.Parse(a[3], inv));
+                ror2.GetType("RoR2.TeleportHelper").GetMethod("TeleportBody", new[] { ror2.GetType("RoR2.CharacterBody"), typeof(Vector3), typeof(bool) })
+                    .Invoke(null, new object[] { LocalBody(), target, true });
+                Log("goto: " + target);
+                break;
+            }
+            case "mats":
+            {
+                // Log renderers whose material/shader name contains a string (e.g. !mats Water)
+                var key = a.Length > 1 ? a[1] : "Water"; int shown = 0;
+                foreach (var r in FindObjectsOfType<Renderer>())
+                    foreach (var m in r.sharedMaterials)
+                    {
+                        if (m == null || (m.name.IndexOf(key, StringComparison.OrdinalIgnoreCase) < 0 && m.shader.name.IndexOf(key, StringComparison.OrdinalIgnoreCase) < 0)) continue;
+                        Log(string.Format("mat: {0} on {1} shader='{2}' supported={3} queue={4} passes={5} lod={6} visible={7} keywords={8}",
+                            m.name, r.name, m.shader.name, m.shader.isSupported, m.renderQueue, m.passCount, m.shader.maximumLOD, r.isVisible, string.Join(" ", m.shaderKeywords)));
+                        if (++shown > 20) break;
+                    }
+                Log("mats: " + shown + " matches for " + key);
+                break;
+            }
+            case "fps":   // !fps on|off: toggle the port's FPS counter (MacFps) for A/B frame-time tests
+            {
+                var t = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType("MacFps")).First(x => x != null);
+                var c = FindObjectOfType(t);
+                t.GetMethod("SetVisible", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(c, new object[] { a.Length < 2 || a[1] == "on" });
+                Log("fps counter " + (a.Length < 2 || a[1] == "on" ? "on" : "off"));
+                break;
+            }
+            case "grab":
+                instance.Grab(a.Length > 1 ? a[1] : "manual");
+                break;
+            case "cam":
+            {
+                foreach (var c in Camera.allCameras)
+                    Log(string.Format("cam: {0} enabled={1} depth={2} path={3} target={4} pixel={5}x{6} hdr={7} msaa={8} dynRes={9} cmdBufs={10}",
+                        c.name, c.enabled, c.depth, c.actualRenderingPath, c.targetTexture ? c.targetTexture.name + " " + c.targetTexture.width + "x" + c.targetTexture.height : "screen",
+                        c.pixelWidth, c.pixelHeight, c.allowHDR, c.allowMSAA, c.allowDynamicResolution, c.commandBufferCount));
+                Log("cam: screen=" + Screen.width + "x" + Screen.height + " fullScreen=" + Screen.fullScreenMode + " dpi=" + Screen.dpi);
+                break;
+            }
+            case "cmdbufs":
+            case "rmcmd":
+            {
+                // List the scene camera's command buffers, or remove one by index (bisecting render issues)
+                var cam = Camera.main; int idx = 0, target = a[0] == "rmcmd" ? int.Parse(a[1]) : -1;
+                foreach (UnityEngine.Rendering.CameraEvent ev in Enum.GetValues(typeof(UnityEngine.Rendering.CameraEvent)))
+                    foreach (var cb in cam.GetCommandBuffers(ev))
+                    {
+                        if (target < 0) Log(string.Format("cmdbuf {0}: {1} '{2}' size={3}", idx, ev, cb.name, cb.sizeInBytes));
+                        else if (idx == target) { cam.RemoveCommandBuffer(ev, cb); Log("cmdbuf removed " + idx + ": " + ev + " '" + cb.name + "'"); }
+                        idx++;
+                    }
+                break;
+            }
+            case "depth":
+                instance.StartCoroutine(instance.DumpDepth(a.Length > 1 ? a[1] : "/tmp/ror2-depth.png"));
+                break;
+            case "tex":   // !tex <global texture name> [png path]: read back any global texture
+                instance.StartCoroutine(instance.DumpDepth(a.Length > 2 ? a[2] : "/tmp/ror2-tex-" + a[1] + ".png", a[1]));
+                break;
             default: Log("unknown helper " + a[0]); break;
         }
+    }
+
+    static MacDiag instance;
+
+    // Read _CameraDepthTexture back after a frame: log its range and save a grayscale picture.
+    System.Collections.IEnumerator DumpDepth(string path, string texName = "_CameraDepthTexture")
+    {
+        yield return new WaitForEndOfFrame();
+        var cam = Camera.main;
+        Log("depth: camera=" + (cam ? cam.name : "none") + " path=" + (cam ? cam.actualRenderingPath.ToString() : "-") +
+            " depthTextureMode=" + (cam ? cam.depthTextureMode.ToString() : "-"));
+        var tex = Shader.GetGlobalTexture(texName);
+        if (tex == null) { Log("depth: " + texName + " is null"); yield break; }
+        var rt = tex as RenderTexture;
+        Log("depth: tex=" + tex.name + " " + tex.width + "x" + tex.height + " format=" + (rt ? rt.format.ToString() + " depthBits=" + rt.depth : tex.GetType().Name) +
+            " created=" + (rt ? rt.IsCreated().ToString() : "-"));
+        var tmp = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGBFloat);
+        Graphics.Blit(tex, tmp);
+        var prev = RenderTexture.active; RenderTexture.active = tmp;
+        var read = new Texture2D(tex.width, tex.height, TextureFormat.RGBAFloat, false);
+        read.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0); read.Apply();
+        RenderTexture.active = prev; RenderTexture.ReleaseTemporary(tmp);
+        var px = read.GetPixels();
+        float mn = float.MaxValue, mx = float.MinValue, sum = 0; int zeros = 0;
+        foreach (var c in px) { mn = Mathf.Min(mn, c.r); mx = Mathf.Max(mx, c.r); sum += c.r; if (c.r == 0) zeros++; }
+        Log(string.Format("depth: {4} r min={0} max={1} mean={2} zeroPixels={3:P1}", mn, mx, sum / px.Length, zeros / (float)px.Length, texName));
+        // Stretch to the observed range so the picture is readable
+        float range = Mathf.Max(mx - mn, 1e-6f);
+        var vis = new Texture2D(tex.width, tex.height, TextureFormat.RGB24, false);
+        var outPx = new Color[px.Length];
+        for (int i = 0; i < px.Length; i++) { float v = (px[i].r - mn) / range; outPx[i] = new Color(v, v, v); }
+        vis.SetPixels(outPx); vis.Apply();
+        System.IO.File.WriteAllBytes(path, vis.EncodeToPNG());
+        Log("depth: saved " + path);
     }
 
     static void Submit(string cmd)
@@ -303,7 +495,7 @@ public class MacDiag : MonoBehaviour
                     break;
                 case "wait-stage":
                     if (scene != "lobby" && scene != "title" && scene != "loadingbasic")
-                    { Log("autopilot: in stage " + scene); apStage = "stage"; apAt = now + 30; }
+                    { Log("autopilot: in stage " + scene); apStage = "stage"; apAt = now + 30; godPending = true; }
                     else if (now >= apAt) { Log("autopilot: no stage, scene=" + scene); apStage = "done"; }
                     break;
                 case "stage":

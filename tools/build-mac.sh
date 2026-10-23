@@ -118,8 +118,8 @@ if [ "${RoR2_MAC_DIAG:-0}" = "1" ]; then
 fi
 M="$DATA_DIR/Managed"
 mcs -target:library -out:"$M/RoR2Mac.dll" -nostdlib -r:"$M/mscorlib.dll" -r:"$M/System.dll" -r:"$M/System.Core.dll" \
-    -r:"$M/netstandard.dll" -r:"$M/UnityEngine.dll" -r:"$M/UnityEngine.CoreModule.dll" -r:"$M/RoR2.dll" -r:"$M/Zio.dll" -r:"$M/com.unity.multiplayer-hlapi.Runtime.dll" \
-    "$REPO/src/RoR2Mac/MacSettings.cs"
+    -r:"$M/netstandard.dll" -r:"$M/UnityEngine.dll" -r:"$M/UnityEngine.CoreModule.dll" -r:"$M/UnityEngine.InputLegacyModule.dll" -r:"$M/UnityEngine.TextRenderingModule.dll" -r:"$M/UnityEngine.UI.dll" -r:"$M/UnityEngine.UIModule.dll" -r:"$M/RoR2.dll" -r:"$M/Zio.dll" -r:"$M/com.unity.multiplayer-hlapi.Runtime.dll" \
+    "$REPO/src/RoR2Mac/MacSettings.cs" "$REPO/src/RoR2Mac/MacFps.cs" "$REPO/src/RoR2Mac/MacDisplaySync.cs"
 # Audio: real Wwise when the macOS Wwise 2023.1.x Unity integration is present (see README),
 # otherwise a silent stub.
 WWISE_DIR="${RoR2_WWISE_DIR:-$REPO/lib/wwise}"

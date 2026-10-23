@@ -26,6 +26,9 @@ public static class MacSettings
 
     static readonly Dictionary<string, string> cloudValues = new Dictionary<string, string>();
     static string cloudConfigPath;
+    // Set once the Mac file has been applied this session. Saves before that (e.g. the game quitting
+    // during startup) would write RoR2's defaults over the player's settings, so they're skipped.
+    static bool applied;
 
     static string LocalPath
     {
@@ -71,6 +74,7 @@ public static class MacSettings
                 Debug.Log("[RoR2Mac] created " + LocalPath);
             }
             RoR2.Console.instance.SubmitCmd((NetworkUser)null, File.ReadAllText(LocalPath), false);
+            applied = true;
             Debug.Log("[RoR2Mac] applied Mac graphics settings from " + LocalPath);
         }
         catch (Exception e) { Debug.LogError("[RoR2Mac] AfterUserConfigLoaded: " + e); }
@@ -79,6 +83,11 @@ public static class MacSettings
     // Hooked at the end of Console.SaveArchiveConVars(): keep Mac graphics local, Windows ones in the cloud.
     public static void AfterSave()
     {
+        if (!applied)
+        {
+            Debug.Log("[RoR2Mac] settings not loaded yet this session; not saving Mac graphics settings");
+            return;
+        }
         try
         {
             File.WriteAllText(LocalPath, Serialize(Get));

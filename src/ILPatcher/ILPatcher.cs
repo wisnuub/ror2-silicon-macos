@@ -226,6 +226,50 @@ static class ILPatcher
         File.Delete(akPath + ".tmp");
     }
 
+    // ---- Post-processing Stack v2: keep the depth buffer across its blits on Metal -------------
+    // PPv2 binds blit targets with CommandBuffer.SetRenderTarget(rt, load, store), which applies
+    // the same actions to the depth attachment. It passes DontCare when it overwrites all colour:
+    // D3D11 ignores that, but Metal discards the depth buffer, so every transparent effect drawn
+    // afterwards (clouds, water, holdout zones) stops depth-testing against the world. Rewrite each
+    // such call to the overload with separate depth actions and always Load/Store depth.
+    static void PatchPostProcessing(string managed, ReaderParameters rp)
+    {
+        string path = Path.Combine(managed, "Unity.Postprocessing.Runtime.dll");
+        if (!File.Exists(path)) return;
+        var asm = AssemblyDefinition.ReadAssembly(path, rp);
+        var mod = asm.MainModule;
+        MethodReference fiveArg = null;
+        int n = 0;
+        foreach (var t in mod.GetTypes())
+            foreach (var m in t.Methods.Where(x => x.HasBody))
+            {
+                var il = m.Body.GetILProcessor();
+                foreach (var ins in m.Body.Instructions.Where(i => i.OpCode == OpCodes.Callvirt || i.OpCode == OpCodes.Call).ToList())
+                {
+                    var target = ins.Operand as MethodReference;
+                    if (target == null || target.Name != "SetRenderTarget" || target.DeclaringType.FullName != "UnityEngine.Rendering.CommandBuffer") continue;
+                    var ps = target.Parameters;
+                    if (ps.Count != 3 || ps[0].ParameterType.Name != "RenderTargetIdentifier" ||
+                        ps[1].ParameterType.Name != "RenderBufferLoadAction" || ps[2].ParameterType.Name != "RenderBufferStoreAction") continue;
+                    if (fiveArg == null)
+                    {
+                        var cb = target.DeclaringType.Resolve();
+                        fiveArg = mod.ImportReference(cb.Methods.First(x => x.Name == "SetRenderTarget" && x.Parameters.Count == 5 &&
+                            x.Parameters[0].ParameterType.Name == "RenderTargetIdentifier" && x.Parameters[3].ParameterType.Name == "RenderBufferLoadAction"));
+                    }
+                    il.InsertBefore(ins, il.Create(OpCodes.Ldc_I4_0));   // depth: RenderBufferLoadAction.Load
+                    il.InsertBefore(ins, il.Create(OpCodes.Ldc_I4_0));   // depth: RenderBufferStoreAction.Store
+                    ins.Operand = fiveArg;
+                    n++;
+                }
+            }
+        if (n == 0) { Console.WriteLine("Unity.Postprocessing.Runtime: nothing to patch"); return; }
+        asm.Write(path + ".tmp");
+        File.Copy(path + ".tmp", path, true);
+        File.Delete(path + ".tmp");
+        Console.WriteLine("Unity.Postprocessing.Runtime: {0} SetRenderTarget calls keep depth (Load/Store)", n);
+    }
+
     static int Main(string[] args)
     {
         if (args.Length < 1) { Console.Error.WriteLine("usage: ILPatcher <Managed dir> [--diag]"); return 2; }
@@ -237,6 +281,9 @@ static class ILPatcher
         var resolver = new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(managed);
         var rp = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = false, InMemory = true };
+
+        PatchPostProcessing(managed, rp);
+        if (args.Contains("--pp-only")) return 0;
         string ror2Path = Path.Combine(managed, "RoR2.dll");
         var ror2 = AssemblyDefinition.ReadAssembly(ror2Path, rp);
         var module = ror2.MainModule;
@@ -311,7 +358,18 @@ static class ILPatcher
 
         // Settings: keep hardware-specific graphics settings Mac-local (see src/RoR2Mac/MacSettings.cs).
         {
-            var mac = AssemblyDefinition.ReadAssembly(Path.Combine(managed, "RoR2Mac.dll"), rp).MainModule.GetType("MacSettings");
+            var macAsm = AssemblyDefinition.ReadAssembly(Path.Combine(managed, "RoR2Mac.dll"), rp);
+            // Optional FPS counter (F10 / -fps), attached to the RoR2Application object at startup
+            var fpsBoot = macAsm.MainModule.GetType("MacFps").Methods.First(m => m.Name == "Boot");
+            var appAwake = module.GetType("RoR2.RoR2Application").Methods.First(m => m.Name == "Awake");
+            var getGo2 = module.ImportReference(core.MainModule.GetType("UnityEngine.Component").Properties.First(p => p.Name == "gameObject").GetMethod);
+            var ail = appAwake.Body.GetILProcessor();
+            var a0 = appAwake.Body.Instructions[0];
+            ail.InsertBefore(a0, ail.Create(OpCodes.Ldarg_0));
+            ail.InsertBefore(a0, ail.Create(OpCodes.Call, getGo2));
+            ail.InsertBefore(a0, ail.Create(OpCodes.Call, module.ImportReference(fpsBoot)));
+            Console.WriteLine("patched RoR2Application.Awake -> MacFps.Boot (F10 / -fps)");
+            var mac = macAsm.MainModule.GetType("MacSettings");
             var console = module.GetType("RoR2.Console");
             HookReturns(console.Methods.First(m => m.Name == "LoadUserConfigFile"),
                 module.ImportReference(mac.Methods.First(m => m.Name == "AfterUserConfigLoaded")), true);

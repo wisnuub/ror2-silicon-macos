@@ -38,6 +38,12 @@ SEGMENT_LIMIT = 1 << 20
 # UI/Healthbar divides by _Rect.y, which its material leaves at 0: on D3D11 the vertex outputs
 # are +/-inf, the rasterizer interpolates them to NaN and no pixel is discarded. Apple GPUs
 # interpolate non-finite varyings to finite values, so every pixel was discarded (empty bar).
+# Fallbacks that point at shaders the game doesn't ship (Legacy/Diffuse), replaced with the
+# matching non-tessellated variant from the same package.
+FALLBACK_FIXES = {
+    "CalmWater/Calm Water [DX11] [Double Sided]": "CalmWater/Calm Water [Double Sided]",
+}
+
 MSL_FIXUPS = {
     "UI/Healthbar": [(r"output\.TEXCOORD2 = (u_xlat\d\.x) / VGlobals\._Rect\.y;",
                       r"output.TEXCOORD2 = (VGlobals._Rect.y == 0.0) ? 0.5 : (\1 / VGlobals._Rect.y);")],
@@ -191,6 +197,11 @@ class Converter:
     def build_shader(self, t, plan):
         """Phase 3: replace D3D11 platform data with Metal subprograms."""
         out_entries, cache = [], {}
+        # Subshaders that need geometry/tessellation stages can't run on Metal here. A subshader whose
+        # passes merely have no Metal programs still counts as supported, so Unity would draw it as
+        # nothing (CalmWater [DX11] water came out black): drop them so Unity uses the Fallback.
+        tess_only = [si for si, ss in enumerate(t["m_ParsedForm"]["m_SubShaders"])
+                     if any(any(p.get(st) and any(p[st]["m_PlayerSubPrograms"]) for st in OTHER_STAGES) for p in ss["m_Passes"])]
 
         def add(entry):
             if entry not in cache:
@@ -242,6 +253,14 @@ class Converter:
                     prog["m_PlayerSubPrograms"] = subs
                     prog["m_ParameterBlobIndices"] = pidx
                     prog["m_CommonParameters"] = dict(EMPTY_COMMON)
+
+        name = t["m_ParsedForm"]["m_Name"]
+        if tess_only:
+            t["m_ParsedForm"]["m_SubShaders"] = [ss for si, ss in enumerate(t["m_ParsedForm"]["m_SubShaders"]) if si not in tess_only]
+            self.stats["tessellation subshader dropped (uses Fallback)"] += len(tess_only)
+        if name in FALLBACK_FIXES:
+            t["m_ParsedForm"]["m_FallbackName"] = FALLBACK_FIXES[name]
+            self.stats["fallback fixed"] += 1
 
         # Pack into segments, entries never straddle segments.
         segs, cur, table = [], bytearray(), []

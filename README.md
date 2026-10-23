@@ -27,7 +27,7 @@ and your account must own the game.
 
 | Part | Status |
 |---|---|
-| Singleplayer (menus, runs, stages, HUD, combat) | Works. About 57 fps in a 1080p window on an 8 GB M1 Mac |
+| Singleplayer (menus, runs, stages, HUD, combat) | Works. 80+ fps at 1440x900 on an 8 GB M1 MacBook (low settings). See [Game optimization](#game-optimization) |
 | Graphics (Metal) | Works. All 1,643 shaders and 696 compute shaders are converted |
 | Steam (login, profile, cloud saves) | Works |
 | Sound | Works, after you download the free Mac sound engine yourself. See [Sound](#sound) |
@@ -132,13 +132,52 @@ the defaults.
 
 ## Show the FPS
 
-The game has no FPS counter of its own. macOS has one built in: Apple's Metal Performance HUD.
-It shows FPS, frame time and memory in the corner of the screen. Start the game from Terminal
-with:
+Press **F10** in the game to show a small FPS counter in the top-right corner. Press it again to
+hide it. To have it on from the start, open the game from Terminal with:
 
 ```bash
-open --env MTL_HUD_ENABLED=1 "/Applications/Risk of Rain 2.app"
+open "/Applications/Risk of Rain 2.app" --args -fps
 ```
+
+The counter shows how many frames the game renders each second, the average frame time, and the
+slowest frame in the last half second.
+
+## Game optimization
+
+The port is tuned to run well on ordinary Mac laptops, including the base M1 MacBook Air with
+8 GB of memory.
+
+**Benchmark** (MacBook Air M1, 8 GB, macOS 26, Distant Roost, game in front and started from
+Launchpad, VSync off, no FPS cap, low settings: shadows off, ambient occlusion off, bloom off,
+full textures):
+
+| Resolution | FPS | Slowest frames (p99) |
+|---|---|---|
+| 640x480 | 122 to 133 | 13 to 14 ms |
+| 1280x800 | 77 to 86 | 21 to 40 ms |
+| 1440x900 | 80 to 86 | 17 to 21 ms |
+| 1920x1200 | 66 to 68 | 20 to 24 ms |
+
+Measured with the game's own frame timer over 5-second windows. The numbers are the frames the
+game renders. A 60 Hz MacBook screen shows up to 60 of them.
+
+**What costs the most** (measured at 1440x900):
+
+- **Shadows** are the biggest cost. Turning them off took a scene from about 30 fps to 50+ fps.
+  If you want shadows, set **Shadow Cascades to 1**: it keeps shadows and was about 25% faster
+  than 2 cascades, with fewer stutters.
+- **Ambient occlusion** costs a few fps. Bloom, detail level and particles cost very little.
+- **Resolution:** 1440x900 looks almost the same as 2880x1800 on a MacBook screen and is about
+  four times less work for the GPU.
+
+**Tips for slower Macs:**
+
+- Close big apps (browsers, chat apps) before playing. On 8 GB Macs the game and the browser fight
+  for memory, and that causes stutters.
+- **VSync off** lets the game run above 60 fps (good for benchmarks). **VSync on** or an FPS cap
+  of 60 usually feels smoother, runs cooler and uses less battery.
+- Start the game from **Launchpad**. If you add it to Steam as a non-Steam game, Steam's overlay
+  holds it at 60 fps.
 
 ## Problems
 
@@ -186,6 +225,10 @@ code is portable and can run on a Mac. The work is in everything around that cod
      bar shader divides by zero. On D3D this gives a value that still shows the bar. On Metal the
      bar came out empty.
 
+   Shaders that need tessellation (the CalmWater water) can't run on Metal here. Their tessellated
+   versions are removed so Unity uses the shader's normal fallback, and one fallback that pointed
+   at a shader the game doesn't ship is corrected.
+
    The reflection data must list buffer variables in offset order. If it doesn't, HLSLcc reads
    the wrong values and models look "exploded". Compute shaders are converted the same way.
    Every shader is checked with Apple's Metal compiler (`mslcheck`).
@@ -198,7 +241,14 @@ code is portable and can run on a Mac. The work is in everything around that cod
      for them.
    - The sound engine calls are matched to the Mac engine (see below).
    - Settings loading and saving is hooked to keep graphics settings on the Mac
-     (`src/RoR2Mac/MacSettings.cs`).
+     (`src/RoR2Mac/MacSettings.cs`). The Mac file is only saved after it has been loaded, so a
+     game that quits during startup can't overwrite your settings with the defaults.
+   - Unity's Post-processing Stack sets its render targets with "don't keep" load actions. Windows
+     ignores them, but Apple GPUs really throw the depth buffer away, so clouds, water and zone
+     effects drew through walls. The build changes those calls to keep the depth buffer.
+   - A small FPS counter (F10) and a fix that makes the game's VSync setting work on macOS: with
+     VSync off, display sync is turned off on the game's Metal layer, so the frame rate is not
+     held at the screen's refresh rate (`src/RoR2Mac/MacFps.cs`, `MacDisplaySync.cs`).
 5. **Steam layer** (`native-stubs/steamshim/`). The game's Steam code (Facepunch.Steamworks) was
    written for an old Steam SDK, version 1.42. Only new versions of `libsteam_api.dylib` exist
    for arm64. The layer gives the game the old 1.42 functions (696 of them, generated) and
@@ -252,7 +302,7 @@ tools/
   shaderconv/                D3D11 to Metal shader converter (Python and HLSLcc)
 src/
   ILPatcher/                 patches to the game's code (Mono.Cecil)
-  RoR2Mac/                   code the patched game calls (Mac graphics settings)
+  RoR2Mac/                   code the patched game calls (Mac settings, FPS counter, VSync)
   MacDiag/                   optional test tool and automatic test runs
 native-stubs/
   steamshim/                 Steam SDK 1.42 layer generator
