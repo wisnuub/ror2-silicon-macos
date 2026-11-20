@@ -27,8 +27,8 @@ GEN="$(mktemp -d)"
 "$PYTHON" "$HERE/gen_shim.py" "$SDK" "$GEN/steam_api_flat_142.cpp"
 mkdir -p "$OUT"
 cp "$REAL" "$OUT/libsteam_api_real.dylib"
-clang++ -std=c++11 -O2 -arch arm64 -shared -fvisibility=hidden -w -I"$SDK" -DPOSIX -DOSX \
-    -install_name @rpath/libsteam_api.dylib \
+clang++ -std=c++11 -O2 -arch arm64 -shared -fvisibility=hidden -w -I"$SDK" -DPOSIX -DOSX ${SHIM_CFLAGS:-} \
+    -install_name @rpath/libsteam_api.dylib -framework CoreFoundation -framework CoreServices \
     "$HERE/steam_core.cpp" "$GEN/steam_api_flat_142.cpp" -o "$OUT/libsteam_api.dylib"
 rm -rf "$GEN"
 echo "Steam shim: $OUT/libsteam_api.dylib -> libsteam_api_real.dylib"

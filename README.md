@@ -12,12 +12,18 @@
 
 **Tested on a Mac with an M1 chip and 8 GB of memory (macOS 26).**
 
-This is an **unofficial** project. It turns **your own Steam copy** of Risk of Rain 2 into a
-native macOS app. It does not use Wine, CrossOver or Rosetta. The game's code runs on Unity's
-own Mac player, and the graphics are converted to Metal when you build the app.
+This is an **unofficial** project: a native macOS version of Risk of Rain 2. It does not use
+Wine, CrossOver or Rosetta. The game's code runs on Unity's own Mac player, and the graphics are
+converted to Metal.
 
-This repository has **no game files**. The scripts download the game with your Steam account,
-and your account must own the game.
+**It is free, and it only runs for players who own Risk of Rain 2 on Steam.** Each time the game
+starts, it asks the Steam app on your Mac whether your account owns the game. If it doesn't, the
+game closes. The Risk of Rain team has said this project is fine as long as nobody is charged for
+it.
+
+This repository has **no game files**. The ready-made app on the
+[Releases](https://github.com/wisnuub/ror2-silicon-macos/releases) page has everything in it,
+sound included. You can also build the app yourself from your own Steam copy.
 
 > This project is not made by, or connected to, Hopoo Games, Gearbox, Unity, Audiokinetic or
 > Valve. Risk of Rain 2 and its icon belong to their owners. The icon above is loaded from Steam
@@ -30,7 +36,7 @@ and your account must own the game.
 | Singleplayer (menus, runs, stages, HUD, combat) | Works. 80+ fps at 1440x900 on an 8 GB M1 MacBook (low settings). See [Game optimization](#game-optimization) |
 | Graphics (Metal) | Works. All 1,643 shaders and 696 compute shaders are converted |
 | Steam (login, profile, cloud saves) | Works |
-| Sound | Works, after you download the free Mac sound engine yourself. See [Sound](#sound) |
+| Sound | Works. Included in the ready-made app. To build the app yourself, see [Sound](#sound) |
 | Multiplayer (Steam lobbies, Mac and Windows together) | Hosting and joining worked in tests. Please report problems |
 | Tessellated water | Shows as flat water (Metal has no tessellation stage for it) |
 
@@ -39,12 +45,66 @@ and your account must own the game.
 - A Mac with Apple Silicon (M1 or newer) and macOS 12 or newer
 - Steam for Mac, installed and logged in
 - A Steam account that owns Risk of Rain 2
-- About 15 GB of free disk space
-- [Homebrew](https://brew.sh)
+- About 8 GB of free disk space to install (4 GB once installed; 15 GB to build the app yourself)
 
-## How to build and play
+## Download and play
 
-Open Terminal and run these steps one by one.
+### 1. Download all the parts
+
+Open the newest release on the [Releases](https://github.com/wisnuub/ror2-silicon-macos/releases/latest)
+page and download **every** file into the same folder (your Downloads folder is fine):
+
+- `Risk-of-Rain-2-Mac-<version>.dmg`
+- `Risk-of-Rain-2-Mac-<version>.002.dmgpart` (and `.003.dmgpart` and so on, if there are more)
+
+The game is too big for one GitHub file, so it comes in parts. You don't need to join them: when
+all the parts are in the same folder, macOS opens them as one disk image.
+
+If macOS says **"missing segment"**, a part is missing or still downloading. Wait until every file
+has finished downloading, then open the `.dmg` again.
+
+### 2. Install
+
+1. Double-click the `.dmg` file. macOS checks the disk image first, which can take a minute or two.
+2. Drag **Risk of Rain 2** onto the **Applications** folder in the window. Don't play it straight
+   from the disk image.
+3. Eject the disk image. You can delete the downloaded files now.
+
+### 3. Allow it in Gatekeeper (first time only)
+
+The app isn't signed by Apple, so macOS blocks it the first time you open it. This is normal for
+free community projects. You only need to do this once.
+
+**macOS 15 Sequoia or newer:**
+
+1. Open **Risk of Rain 2** from Applications. macOS says *“Risk of Rain 2” Not Opened*. Click
+   **Done** (not Move to Trash).
+2. Open **System Settings**, go to **Privacy & Security** and scroll down to **Security**.
+3. Next to *“Risk of Rain 2” was blocked to protect your Mac*, click **Open Anyway** and enter
+   your Mac password.
+4. Click **Open Anyway** once more when macOS asks.
+
+**macOS 12 to 14:** Control-click (or right-click) **Risk of Rain 2** in Applications, choose
+**Open**, then click **Open** again.
+
+**Or with Terminal (any macOS version):**
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Risk of Rain 2.app"
+```
+
+### 4. Play
+
+1. Open Steam and log in with the account that owns Risk of Rain 2.
+2. Open **Risk of Rain 2** from Launchpad or the Applications folder.
+
+**When Risk of Rain 2 gets an update on Steam**, download the newest release. Mac and Windows
+players need the same game version to play together.
+
+## Build it yourself
+
+You don't need this if you use the ready-made app. To build it, you also need
+[Homebrew](https://brew.sh). Open Terminal and run these steps one by one.
 
 ```bash
 # 1. Install the tools
@@ -56,7 +116,8 @@ git clone https://github.com/wisnuub/ror2-silicon-macos.git
 cd ror2-silicon-macos
 
 # 3. Download your copy of the game (the Windows version) with Valve's SteamCMD.
-#    SteamCMD asks for your Steam password and Steam Guard code. Type them there.
+#    Steam for Mac must be running and logged in: the script first checks that your account
+#    owns the game. SteamCMD asks for your Steam password and Steam Guard code. Type them there.
 tools/fetch-ror2.sh <your-steam-username>
 
 # 4. Download Unity's Mac player
@@ -85,14 +146,32 @@ saves work as normal.
 **The first start is slow.** macOS checks a new app the first time it opens, and the game builds
 its Metal shaders the first time it needs them. Later starts are faster.
 
-**Do not share the app you build.** It contains your game files. Share this project instead, so
-other people can build the app from their own copy.
+## Steam ownership check and sharing
+
+Each time the game starts, it checks with the Steam app on your Mac that the logged-in account
+owns Risk of Rain 2. Steam Family Sharing counts, and so does Steam's offline mode, the same as
+for the Windows game. If the check fails, the game shows one of these messages and closes:
+
+| Message | What to do |
+|---|---|
+| Steam is not running | Open Steam and log in, then open the game again |
+| Steam did not start Risk of Rain 2 | Log in to Steam with the account that owns the game |
+| Risk of Rain 2 is not in your Steam library | The logged-in account does not own the game. **Open in Steam** shows its store page |
+
+The build scripts check the same thing before they download or build the game
+(`tools/steam-check.sh`).
+
+**Sharing:** the app has the game files in it. You may share it for free. Never sell it or ask
+for money for it. It only runs for Steam accounts that own Risk of Rain 2.
 
 ## Sound
 
+The ready-made app already has the Mac sound engine. This section is only for building the app
+yourself.
+
 The game uses Audiokinetic Wwise 2023.1 for sound. The game's sound files work on a Mac, but the
-Mac sound engine is not included. Only Audiokinetic gives it out. It is free, but you need an
-Audiokinetic account. Without it, the game runs with no sound.
+Mac sound engine is not in this repository. Only Audiokinetic gives it out. It is free, but you
+need an Audiokinetic account. Without it, the app you build runs with no sound.
 
 1. Install the [Wwise Launcher](https://www.audiokinetic.com/download/) and sign in (or make a
    free account).
@@ -193,22 +272,29 @@ these resolutions. macOS Game Mode keeps the main thread on a fast performance c
 ## Problems
 
 - **macOS says the app is damaged or won't open it:** run
-  `xattr -cr "build/Risk of Rain 2.app"`, then open it again.
-- **Black screen at start:** make sure Steam is running and logged in before you open the game.
+  `xattr -cr "/Applications/Risk of Rain 2.app"`, then open it again. See
+  [Allow it in Gatekeeper](#3-allow-it-in-gatekeeper-first-time-only).
+- **"Missing segment" when opening the .dmg:** download every part of the release into the same
+  folder as the `.dmg`, and wait until they have all finished downloading.
+- **The game says Steam is not running, or closes at start:** open Steam and log in with the
+  account that owns Risk of Rain 2 before you open the game. See
+  [Steam ownership check](#steam-ownership-check-and-sharing).
 - **Log file:** `~/Library/Logs/Hopoo Games, LLC/Risk of Rain 2/Player.log`
 - **Test build:** `RoR2_MAC_DIAG=1 tools/build-mac.sh` adds a tool that writes performance
   numbers to the log, saves screenshots and can run automatic tests.
 
 ## Legal
 
-- This project only has build scripts, converters, small stand-in libraries and patch code. It
-  has no Risk of Rain 2 files and no files from Unity, Audiokinetic or Valve.
-- You must own Risk of Rain 2 on Steam. The game is downloaded with Valve's SteamCMD, using your
-  account. Steam checks that you own the game when you play.
-- Unity's Mac player, the Mono libraries, HLSLcc and Valve's Steam library are downloaded from
-  their makers when you build. You download Audiokinetic's sound engine yourself. Their own
-  licenses apply.
-- Everything happens on your own Mac, with your own copy. Do not share the app you build.
+- This repository only has build scripts, converters, small stand-in libraries and patch code.
+  It has no Risk of Rain 2 files and no files from Unity, Audiokinetic or Valve.
+- The ready-made app on the Releases page contains the game files. It is shared for free. The
+  Risk of Rain team has said the project is fine as long as nobody is charged for it, so it must
+  never be sold.
+- You must own Risk of Rain 2 on Steam. The app checks with Steam that your account owns the game
+  each time it starts, and the build scripts check before they download the game with Valve's
+  SteamCMD.
+- Unity's Mac player, the Mono libraries, HLSLcc and Valve's Steam library come from their makers.
+  Audiokinetic's sound engine comes from Audiokinetic. Their own licenses apply.
 - The code in this project uses the MIT license (see `LICENSE`).
 
 ---
@@ -264,7 +350,9 @@ code is portable and can run on a Mac. The work is in everything around that cod
    written for an old Steam SDK, version 1.42. Only new versions of `libsteam_api.dylib` exist
    for arm64. The layer gives the game the old 1.42 functions (696 of them, generated) and
    passes them to Valve's current library. That library comes from a fixed Steamworks.NET
-   release.
+   release. The layer also does the ownership check: when the game starts Steam, it asks Valve's
+   library directly (`ISteamApps::BIsSubscribedApp`) whether the logged-in account owns the
+   game, and shows a macOS alert and quits if not (`steam_core.cpp`).
 6. **Stand-in libraries** for Windows-only parts (EOS, PlayFab Party, Discord, Rewired
    DirectInput, XAudio2, BCrypt, and a small kernel32/user32/ntdll library).
 7. **Data fixes.** The graphics setting changes from D3D11 to Metal in `globalgamemanagers`, and
@@ -305,6 +393,9 @@ tools/
   extract-unity-player.sh    get Unity's Mac player
   build-mac.sh               build the app
   install-mac.sh             move the app into /Applications
+  package-release.sh         check a build is a clean release build, make the release parts
+  steam-check.sh             check that Steam is logged in with an account that owns the game
+  fetch-steam-api.sh         get Valve's libsteam_api.dylib (pinned, checksummed)
   fetch-unity-classlibs.sh   get the Mac Mono libraries from the Unity Editor installer
   patch-graphics-api.py      change the graphics setting from D3D11 to Metal
   patch-catalog.py           fix Addressables paths for macOS
@@ -316,7 +407,8 @@ src/
   RoR2Mac/                   code the patched game calls (Mac settings, FPS counter, VSync)
   MacDiag/                   optional test tool and automatic test runs
 native-stubs/
-  steamshim/                 Steam SDK 1.42 layer generator
+  steamshim/                 Steam SDK 1.42 layer generator and the ownership check
+  steamcheck/                command-line ownership check used by the build scripts
   *.c                        stand-ins for Windows-only libraries
 ```
 

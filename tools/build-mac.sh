@@ -6,7 +6,8 @@
 #   - Unity player: tools/extract-unity-player.sh        (into lib/unity/)
 #   - Optional audio: macOS Wwise 2023.1.x Unity integration in lib/wwise/ (see README)
 #
-# The .app it produces contains your game files: don't share it.
+# The .app it produces contains the game files. It may be shared for free (never sold), and it
+# only runs for Steam accounts that own Risk of Rain 2 (see native-stubs/steamshim/steam_core.cpp).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,6 +15,9 @@ GAME_SRC="${ROR2_GAME_DIR:-$REPO/game}"
 PLAYER="$REPO/lib/unity/player"
 BUILD="$REPO/build"
 APP="$BUILD/Risk of Rain 2.app"
+
+# Only for players who own the game: Steam must be running with an account that owns it
+"$REPO/tools/steam-check.sh" || exit 1
 
 if [ ! -f "$GAME_SRC/Risk of Rain 2.exe" ]; then
     echo "ERROR: Game files not found at $GAME_SRC"
@@ -180,17 +184,9 @@ fi
 # Step 4: Steamworks. The game's Facepunch.Steamworks speaks the SDK 1.42 flat API; the shim wraps a
 # current macOS libsteam_api.dylib (Valve's redistributable, as shipped in Steamworks.NET releases).
 STEAM_DYLIB="${RoR2_STEAM_API:-$REPO/lib/steamworks/libsteam_api.dylib}"
-if [ ! -f "$STEAM_DYLIB" ]; then
-    echo "Downloading libsteam_api.dylib (Steamworks.NET 2025.164.1)..."
-    TMP="$(mktemp -d)"
-    curl -fsSL -o "$TMP/s.zip" \
-        "https://github.com/rlabrecque/Steamworks.NET/releases/download/2025.164.1/Steamworks.NET-Standalone_2025.164.1.zip"
-    echo "9412348cc404563be5a43a28347cfeda3c679ee044a14d87a507ed2d796a537d  $TMP/s.zip" | shasum -a 256 -c - >/dev/null \
-        || { echo "ERROR: Steamworks.NET download checksum mismatch"; exit 1; }
-    mkdir -p "$(dirname "$STEAM_DYLIB")"
-    unzip -q -o -j "$TMP/s.zip" "OSX-Linux-x64/steam_api.bundle/Contents/MacOS/libsteam_api.dylib" -d "$(dirname "$STEAM_DYLIB")"
-    rm -rf "$TMP"
-fi
+[ -f "$STEAM_DYLIB" ] || "$REPO/tools/fetch-steam-api.sh"
+# The shim also holds the ownership check: at start the game quits unless Steam is running and
+# the logged-in account owns Risk of Rain 2
 echo "Building Steamworks 1.42 shim..."
 PYTHON="$PYTHON" "$REPO/native-stubs/steamshim/build.sh" "$STEAM_DYLIB" "$PLUGIN_DIR"
 
@@ -277,4 +273,4 @@ du -sh "$APP"
 echo ""
 echo "To play: start Steam and log in, then open '$APP'"
 [ -n "$AK_BIN" ] || echo "Audio: off (no macOS Wwise engine in lib/wwise; see README)"
-echo "This app contains your game files -- don't share it."
+echo "Share it for free only, never sell it. It only runs for Steam accounts that own the game."
