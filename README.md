@@ -40,6 +40,7 @@ files, sound included. You can also build the app yourself from your own Steam c
 | Sound | Works. Included in the ready-made app. To build the app yourself, see [Sound](#sound) |
 | Multiplayer (Steam lobbies, Mac and Windows together) | Hosting and joining worked in tests. Please report problems |
 | Tessellated water | Shows as flat water (Metal has no tessellation stage for it) |
+| Mods and a mod manager | Coming soon |
 
 ### Fixed for Mac
 
