@@ -16,14 +16,15 @@ This is an **unofficial** project: a native macOS version of Risk of Rain 2. It 
 Wine, CrossOver or Rosetta. The game's code runs on Unity's own Mac player, and the graphics are
 converted to Metal.
 
-**It is free, and it only runs for players who own Risk of Rain 2 on Steam.** Each time the game
-starts, it asks the Steam app on your Mac whether your account owns the game. If it doesn't, the
-game closes. The Risk of Rain team has said this project is fine as long as nobody is charged for
-it.
+**It only runs for players who own Risk of Rain 2 on Steam.** Each time the game starts, it asks
+the Steam app on your Mac whether your account owns the game. If it doesn't, the game closes.
 
-This repository has **no game files**. The ready-made app on the
-[Releases](https://github.com/wisnuub/ror2-silicon-macos/releases) page has everything in it,
-sound included. You can also build the app yourself from your own Steam copy.
+The source code in this repository has no game files. The ready-made app on the
+[Releases](https://github.com/wisnuub/ror2-silicon-macos/releases) page does include the game
+files, sound included. You can also build the app yourself from your own Steam copy.
+
+> **Do not sell the release.** Don't charge for it, put it behind a paywall or bundle it with
+> anything paid. See [Legal](#legal).
 
 > This project is not made by, or connected to, Hopoo Games, Gearbox, Unity, Audiokinetic or
 > Valve. Risk of Rain 2 and its icon belong to their owners. The icon above is loaded from Steam
@@ -85,7 +86,7 @@ has finished downloading, then open the `.dmg` again.
 ### 3. Allow it in Gatekeeper (first time only)
 
 The app isn't signed by Apple, so macOS blocks it the first time you open it. This is normal for
-free community projects. You only need to do this once.
+community projects. You only need to do this once.
 
 **macOS 15 Sequoia or newer:**
 
@@ -173,8 +174,8 @@ for the Windows game. If the check fails, the game shows one of these messages a
 The build scripts check the same thing before they download or build the game
 (`tools/steam-check.sh`).
 
-**Sharing:** the app has the game files in it. You may share it for free. Never sell it or ask
-for money for it. It only runs for Steam accounts that own Risk of Rain 2.
+**Sharing:** the app has the game files in it. Never sell it or ask for money for it. It only
+runs for Steam accounts that own Risk of Rain 2.
 
 ## Sound
 
@@ -299,9 +300,10 @@ these resolutions. macOS Game Mode keeps the main thread on a fast performance c
 
 - This repository only has build scripts, converters, small stand-in libraries and patch code.
   It has no Risk of Rain 2 files and no files from Unity, Audiokinetic or Valve.
-- The ready-made app on the Releases page contains the game files. It is shared for free. The
-  Risk of Rain team has said the project is fine as long as nobody is charged for it, so it must
-  never be sold.
+- The ready-made app on the Releases page contains the game files.
+- **Permission:** the Risk of Rain team has said it's fine to share this project as long as
+  nobody is charged for it. Selling the release, charging for downloads or access, or bundling
+  it with anything paid is not allowed.
 - You must own Risk of Rain 2 on Steam. The app checks with Steam that your account owns the game
   each time it starts, and the build scripts check before they download the game with Valve's
   SteamCMD.
