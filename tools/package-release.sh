@@ -133,8 +133,11 @@ awk 'function fill(s, key,   i, v) { v = ENVIRON[key]; key = "@" key "@"
          while ((i = index(s, key)) > 0) s = substr(s, 1, i - 1) v substr(s, i + length(key)); return s }
      { $0 = fill($0, "NAME"); $0 = fill($0, "WHICH"); $0 = fill($0, "FILES"); $0 = fill($0, "GAME_VERSION")
        $0 = fill($0, "SUMS"); print }' > "$OUT/RELEASE-NOTES.md" <<'EOF'
-Risk of Rain 2 for Apple Silicon Macs (M1 or newer, macOS 12 or newer). It's free, sound is
-included, and it only runs if your Steam account owns Risk of Rain 2.
+Risk of Rain 2 for Apple Silicon Macs (M1 or newer, macOS 12 or newer). Sound is included, and
+it only runs if your Steam account owns Risk of Rain 2.
+
+> **Do not sell this release.** Don't charge for it, put it behind a paywall or bundle it with
+> anything paid.
 
 **Game version:** @GAME_VERSION@. This is the same version as the Windows game on Steam, so you
 can play together.
@@ -161,7 +164,7 @@ as that one file finishes. That's fine, just open it again when everything is do
 ## 3. Allow it in Gatekeeper (first time only)
 
 The app isn't signed by Apple, so macOS blocks it the first time you open it. This is normal for
-free community projects. You only need to do this once.
+community projects. You only need to do this once.
 
 **macOS 15 Sequoia or newer**
 
@@ -203,8 +206,8 @@ download the newest release here.
 @SUMS@
 ```
 
-Free to share, never sell it. Not made by or connected to Hopoo Games, Gearbox, Unity,
-Audiokinetic or Valve.
+The Risk of Rain team has said it's fine to share this project as long as nobody is charged for
+it. Never sell it. Not made by or connected to Hopoo Games, Gearbox, Unity, Audiokinetic or Valve.
 EOF
 
 echo ""
