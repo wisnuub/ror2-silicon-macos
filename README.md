@@ -40,6 +40,17 @@ sound included. You can also build the app yourself from your own Steam copy.
 | Multiplayer (Steam lobbies, Mac and Windows together) | Hosting and joining worked in tests. Please report problems |
 | Tessellated water | Shows as flat water (Metal has no tessellation stage for it) |
 
+### Fixed for Mac
+
+These looked wrong on Apple GPUs at first and are fixed in the current release:
+
+- **Blank health bars.** Health bars (yours, allies' and enemies') showed up empty. The game's
+  health bar shader divides by zero, which D3D11 on Windows happens to survive but Metal does
+  not. The shader converter now handles that case, so the bars fill and drain normally.
+- **Effects drawing through walls.** Clouds, water and zone effects no longer show through
+  walls and terrain.
+- **VSync setting.** Turning VSync off in the game's settings now really unlocks the frame rate.
+
 ## What you need
 
 - A Mac with Apple Silicon (M1 or newer) and macOS 12 or newer
@@ -52,7 +63,8 @@ sound included. You can also build the app yourself from your own Steam copy.
 ### 1. Download all the parts
 
 Open the newest release on the [Releases](https://github.com/wisnuub/ror2-silicon-macos/releases/latest)
-page and download **every** file into the same folder (your Downloads folder is fine):
+page (currently [v1.0.0](https://github.com/wisnuub/ror2-silicon-macos/releases/tag/v1.0.0)) and
+download **every** file into the same folder (your Downloads folder is fine):
 
 - `Risk-of-Rain-2-Mac-<version>.dmg`
 - `Risk-of-Rain-2-Mac-<version>.002.dmgpart` (and `.003.dmgpart` and so on, if there are more)
